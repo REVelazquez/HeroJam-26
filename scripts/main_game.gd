@@ -107,7 +107,7 @@ func _reset_level():
 				animation_player.play("reset_lvl_2")
 				platforms_appearing.level_2.button_pressed =false
 				platforms_appearing.level_2.platforms_out =false
-				$Level2/DoorLvl2/DooRLvl2Sprite.play("Default")
+				$Level2/DoorLvl2/DoorLvl2Sprite.play("Default")
 				out_light = true
 				player_light.texture_scale = 7
 
