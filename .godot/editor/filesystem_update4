@@ -1,0 +1,6 @@
+res://scenes/main_game.tscn
+res://scripts/main_game.gd
+res://scenes/player.tscn
+res://scripts/player.gd
+res://default_bus_layout.tres
+res://scripts/sounds.gd

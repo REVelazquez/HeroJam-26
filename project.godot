@@ -15,6 +15,14 @@ run/main_scene="res://scenes/main_game.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
+[audio]
+
+buses/default_bus_layout=""
+
+[autoload]
+
+Sounds="*uid://bywa2fn8vbp4"
+
 [display]
 
 window/stretch/mode="canvas_items"
