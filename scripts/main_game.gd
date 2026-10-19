@@ -4,19 +4,20 @@ extends Node2D
 @onready var player_light: PointLight2D = $PlayerLight
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 @onready var music_player = $Music
+@onready var axis_clock = [$Level2/Estaticos/Reloj/Eje1,$Level2/Estaticos/Reloj/Eje2]
+
 
 
 var changing_textures={
-	"level_2": {"idle":preload("res://multimedia/palanca_de_pared_up.webp"), "active":preload("res://multimedia/palanca_de_pared_down.webp")}
+	"level_2": {"idle":preload("res://multimedia/Images/palanca_de_pared_up.webp"), "active":preload("res://multimedia/Images/palanca_de_pared_down.webp")}
 }
-
-var min_escale_light: float = 0.5
+var min_scale_light: float = 0.5
+var max_scale_light: float = 8.0
 var out_light = false
 var platforms_appearing ={
 	"level_1":{"button_1":{"pressed":false, "activated":false}, "button_2":{"pressed":false, "activated":false}},
 	"level_2":{"button_pressed":false, "platforms_out":false}
 }
-
 
 var timed_puzzles={
 	"level_1":{},
@@ -24,27 +25,51 @@ var timed_puzzles={
 		"pulled":false
 	}
 }
+var show_level = ""
+var levels_showed = []
 var levels_completed = []
+var level_1_transition_started := false
 
 var move_eyes_lvl_1 = false
 var target_picture_lvl_1 = null
 var eyes_initial_position_lvl_1 = Vector2(0, -5)
 var eyes_max_distance_lvl_1 = Vector2(5, 3)
+var cam_original_size
 var eyes_speed_lvl_1 = 8.0
+var showing_level = false
 var picture_sound_played = false
+var picture_audio_fading := false
+var player_can_move = false
+var clock_follow_target = false
 
 var save_point : String
 var to_pull = ""
 var level_key = ""
 
+var run_start = false
+var camera_on_player = false
 
 # Called when the node enters the scene tree for the first time.
 func _ready() -> void:
+	camera_2d.position = player.position - Vector2(-124, 64)
+	animation_player.play("start_game")
+	player_light.position = player.position
+	$player.process_mode = PROCESS_MODE_DISABLED
 	$Level2/Movibles/CajaMovible.add_to_group("Movibles")
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta: float) -> void:
 	music_player.position = player.position
+	player_light.global_position = player.global_position
+
+	print("camara ", camera_on_player)
+	print("save_point ", save_point)
+	print("level_1_Trans ", level_1_transition_started)
+	if (player_can_move and camera_on_player )and (save_point == "" or save_point == "level_1_check" and !level_1_transition_started):
+		camera_2d.position = player.position
+		
+	if run_start and camera_on_player and (save_point in levels_showed or save_point == ""):
+		player.process_mode = Node.PROCESS_MODE_INHERIT
 	
 	if !music_player.playing:
 		music_player.stream = Sounds.tracks.something_strange
@@ -52,21 +77,19 @@ func _process(delta: float) -> void:
 	if music_player.get_playback_position() >= 16.0:
 			music_player.play(1)
 	
-	_arrow_direction(delta)
+	_arrow_direction()
 	#movimiento de ojos by IA
 	if move_eyes_lvl_1 and is_instance_valid(target_picture_lvl_1):
 		var audio_player = $Level1/Picture/AudioStreamPlayer2D
 		
 		#Verificamos si ya está sonando para NO reiniciarlo en cada frame y si salio
 		if not audio_player.playing and !picture_sound_played:
-			# Opcional: Si necesitas cambiar el archivo de audio dinámicamente
 			audio_player.stream = Sounds.tracks.picture_sound 
-			audio_player.play()
+			audio_player.play(1.3)
 			picture_sound_played = true
 		
 		var current_target = target_picture_lvl_1.global_position
 		var eyes = $Level1/Picture/Eyes
-
 		var direction = current_target - eyes.global_position
 		# Limitamos el movimiento de las pupilas
 		var target_position = eyes_initial_position_lvl_1 + Vector2(
@@ -78,11 +101,41 @@ func _process(delta: float) -> void:
 		eyes.position = eyes.position.lerp(
 			target_position,
 			clampf(eyes_speed_lvl_1 * delta, 0.0, 1.0))
+	# Desvanecimiento del sonido si el jugador sale y se esta reproduciendo el sonido
 	if !move_eyes_lvl_1:
-		$Level1/Picture/AudioStreamPlayer2D.stop()
-	camera_2d.position = player.position
-	player_light.position = player.position
+		var audio_player = $Level1/Picture/AudioStreamPlayer2D
+		if audio_player.playing and !picture_audio_fading:
+			picture_audio_fading = true
+			audio_player.stop()
+# aca termina ojos y empieza lo de mostrar nivel:
+	if showing_level and save_point == "level_1_check" and not level_1_transition_started:
+		level_1_transition_started = true
+		$Level1/Nubes.visible = true
+		player.process_mode = Node.PROCESS_MODE_DISABLED
+		var light_lvl1 = $Lvl1LightRef
+		light_lvl1.visible = true
+		var tween_position = create_tween()
+		var tween_size = create_tween()
+		tween_position.tween_property(camera_2d, "position", $Lvl1LightRef.position, 1.0)
+		tween_size.tween_property(camera_2d,"zoom", Vector2(0.974, 0.891),1.0)
+		await tween_position.finished
+		await tween_size.finished
+		if $"CameraMove timer".is_stopped():
+			$"CameraMove timer".start()
 
+#esto es el menu que se muestra
+	if run_start and !camera_on_player :
+		var camera_tween = create_tween()
+		animation_player.play("menu_fading")
+		camera_tween.tween_property(camera_2d, "position", player.position, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		await camera_tween.finished
+		camera_on_player = true
+	
+	if clock_follow_target:
+		for i in range(axis_clock.size()):
+			var direction = player.global_position - axis_clock[i].global_position
+			axis_clock[i].global_rotation = direction.angle() + PI
+			
 # Inicia reduccion de luz al salir o la detiene si se entra a check point o a zona de luz
 	if $Timer.is_stopped() and out_light:
 		$Timer.start()
@@ -104,19 +157,19 @@ func _process(delta: float) -> void:
 	if platforms_appearing.level_2.button_pressed and !platforms_appearing.level_2.platforms_out:
 		platforms_appearing.level_2.platforms_out = true
 		
-	if player_light.texture_scale <= min_escale_light:
+	if player_light.texture_scale <= min_scale_light:
 		$Timer.stop()
-		player_light.texture_scale = 0.01
+		player_light.texture_scale = 0.3
 
 func _on_timer_timeout() -> void:
-	player_light.texture_scale *= 0.5
+	player_light.texture_scale *= 0.95
 
 func _on_area_2d_body_exited(body: Node2D) -> void:
+	if "lvl_1" not in levels_showed:
+		showing_level = true
 	if body.name == "player":
-		if out_light:
-			out_light = false
-			player_light.texture_scale = 10
-		else:
+		player_light.texture_scale = max_scale_light
+		if !out_light:
 			out_light = true
 		save_point = "level_1_check"
 		for child in $Level1/PuenteLvl1.get_children():
@@ -139,7 +192,9 @@ func _on_save_point_lvl_2_body_entered(body: Node2D) -> void:
 		
 		if !out_light:
 			out_light = true
-			player_light.texture_scale = 7
+			player_light.texture_scale = max_scale_light
+		if out_light:
+			player_light.texture_scale = max_scale_light
 	
 func _reset_level():
 	if save_point not in levels_completed:
@@ -155,16 +210,16 @@ func _reset_level():
 				platforms_appearing.level_1.button_2.pressed = false
 				platforms_appearing.level_1.button_2.activated = false
 				animation_player.play("lvl_1_reset")
-				player_light.texture_scale = 7
+				player_light.texture_scale = max_scale_light
 			"level_2_check":
 				player.position = $Level2/Save_point_lvl_2.position
-				player_light.texture_scale = 5.0
+				player_light.texture_scale =  max_scale_light
 				animation_player.play("reset_lvl_2")
 				platforms_appearing.level_2.button_pressed =false
 				platforms_appearing.level_2.platforms_out =false
 				$Level2/DoorLvl2/DoorLvl2Sprite.play("Default")
 				out_light = true
-				player_light.texture_scale = 7
+				player_light.texture_scale = max_scale_light
 
 func _on_area_palanca_lvl_2_body_entered(body: Node2D) -> void:
 	if body.name == "player":
@@ -193,7 +248,7 @@ func _on_lvl_2_key_area_body_entered(body: Node2D) -> void:
 	if body.name == "player":
 		level_key = "level_2_key"
 		$Level2/Lvl2KeyArea.visible = false
-		$player/Arrow.visilbe = false
+		$player/Arrow.visible = false
 		
 
 func _on_open_door_lvl_2_body_entered(body: Node2D) -> void:
@@ -269,7 +324,7 @@ func _on_death_zone_body_entered(body):
 		$Level1/Lvl1KeyArea/Sprite2D.play("default")
 		if !out_light:
 			out_light = true
-			player_light.texture_scale = 7
+			player_light.texture_scale = max_scale_light
 func _on_open_door_lvl_1_body_entered(body):
 	if body.name == "player":
 		if level_key == "level_1_key":
@@ -281,7 +336,7 @@ func _on_open_door_lvl_1_body_entered(body):
 			$Level1/Lvl1KeyArea.queue_free()
 			$player/Arrow.visible = false
 
-func _arrow_direction(delta):
+func _arrow_direction():
 	var arrow = $player/Arrow
 	var key : Node2D
 	
@@ -300,3 +355,41 @@ func _arrow_direction(delta):
 		arrow.global_rotation = direction.angle() + PI / 2
 	if level_key != "":
 		arrow.visible = false
+
+func _on_reloj_detector_body_exited(body):
+	if body.name == "player" and !clock_follow_target: 
+		clock_follow_target = true
+	else:
+		clock_follow_target = false
+
+
+func _on_play_button_pressed():
+	run_start = true
+	player_can_move = true
+
+func _relocate_camera():
+	if save_point == "level_1_check":
+		var tween_position = create_tween()
+		var tween_zoom = create_tween()
+		tween_zoom.tween_property(camera_2d,"zoom", Vector2(2.5, 2.5),1.0)
+		tween_position.tween_property(camera_2d, "position", player.global_position, 1.0)
+		await tween_position.finished
+		await tween_zoom.finished
+		out_light= true
+		levels_showed.append("lvl_1")
+		$"CameraMove timer".stop()
+		showing_level = false
+		
+
+func _on_camera_move_timer_timeout():
+	_relocate_camera()
+	if save_point == "level_1_check":
+		var light_lvl1 = $Lvl1LightRef
+		var tween_light = create_tween()
+		tween_light.tween_property(light_lvl1, "scale", Vector2.ZERO, 1)
+		await tween_light.finished
+		light_lvl1.visible = false
+		level_1_transition_started = false
+		camera_on_player = true
+		player_can_move = true
+		player.process_mode = PROCESS_MODE_INHERIT

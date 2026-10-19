@@ -14,12 +14,17 @@ func _physics_process(delta: float) -> void:
 		var collider = collision.get_collider()
 		if collider.is_in_group("Movibles"):
 			collider.apply_central_impulse(collision.get_normal()*-10)
-	if Input.is_action_pressed("ui_up") and is_on_floor():
+	if (Input.is_action_pressed("ui_up") or Input.is_action_pressed("up_second")) and is_on_floor():
 		velocity.y = JUMP_VELOCITY
 	
 	# Get the input direction and handle the movement/deceleration.
 	# As good practice, you should replace UI actions with custom gameplay actions.
-	var direction := Input.get_axis("ui_left", "ui_right")
+	var direction
+	if Input.is_action_pressed("ui_left") or Input.is_action_pressed("left_second"):
+		direction = -1
+	if Input.is_action_pressed("right_second") or Input.is_action_pressed("ui_right"):
+		direction = 1
+	
 	if direction:
 		velocity.x = direction * SPEED
 	else:
